@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: football_db
+    environment:
+      POSTGRES_USER: football_user
+      POSTGRES_PASSWORD: football_password
+      POSTGRES_DB: football_predictions
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U football_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: football_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flask Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: football_backend
+    command: python -m app.main
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://football_user:football_password@db:5432/football_predictions
+      REDIS_URL: redis://redis:6379/0
+      FLASK_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - football_network
+
+volumes:
+  postgres_data:
+
+networks:
+  football_network:
+    driver: bridge
